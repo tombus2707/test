@@ -1,7 +1,7 @@
 {
   "name": "8‑Bit Adventurer Forge",
   "short_name": "8‑Bit Forge",
-  "description": "D&D generator with options, magic items, and online pixel portraits.",
+  "description": "D&D character generator (offline PWA) with options, magic items, and accurate gear/spells.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
