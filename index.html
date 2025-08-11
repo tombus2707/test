@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>8‑Bit Adventurer Forge</title>
+  <meta name="theme-color" content="#365173" />
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/assets/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="/assets/icon-192.png">
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { image-rendering: pixelated; }
+    .scanlines { background-image: linear-gradient(rgba(0,0,0,.18) 50%, transparent 50%); background-size: 100% 3px; }
+    .btn { position: relative; display:block; }
+    .btn .shadow { position:absolute; inset:0; transform: translate(4px,4px); background:black; }
+    .btn .face { position:relative; display:block; border:4px solid #000; padding:.75rem 1rem; font-weight:900; text-transform:uppercase; letter-spacing:.12em; text-align:center; }
+    .toggle { appearance:none; width:22px; height:22px; border:4px solid #000; background:#fff; display:inline-block; vertical-align:middle; }
+    .toggle:checked { background: #a8e6a1; box-shadow: inset 0 0 0 3px #fff; }
+    .mode-active { outline: 4px solid #000; }
+    .portrait-frame { width:128px; height:128px; image-rendering: pixelated; }
+    .wrap { overflow-wrap: anywhere; }
+    .box { background:#efe7d6; border:2px solid #000; padding:.75rem; }
+    .error { color:#7c1f1f; background:#fbeaea; border:2px solid #000; padding:.5rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  </style>
+</head>
+<body class="min-h-screen w-full bg-gradient-to-b from-[#365173] to-[#1f2d42] text-[#1a1207]">
+  <div class="pointer-events-none fixed inset-0 opacity-10 mix-blend-overlay scanlines"></div>
+  <div id="root"><div style="display:grid;place-items:center;min-height:100vh;color:#e8dfce;">Loading 8‑Bit Forge…</div></div>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js').catch(console.error);
+      });
+    }
+  </script>
+
+  <script type="text/babel" data-presets="env,react">
+    const { useState, useMemo } = React;
+
+    // === Data ===
+    const RACES = ["Random","Human","Elf","Dwarf","Halfling","Gnome","Half‑Elf","Half‑Orc","Tiefling","Dragonborn","Aasimar","Genasi","Goliath","Tabaxi","Firbolg","Triton"];
+    const CLASSES = ["Random","Barbarian","Bard","Cleric","Druid","Fighter","Monk","Paladin","Ranger","Rogue","Sorcerer","Warlock","Wizard"];
+    const BACKGROUNDS = ["Random","Acolyte","Charlatan","Criminal","Entertainer","Folk Hero","Guild Artisan","Hermit","Noble","Outlander","Sage","Sailor","Soldier","Urchin"];
+    const ALIGNMENTS = ["Random","Lawful Good","Neutral Good","Chaotic Good","Lawful Neutral","True Neutral","Chaotic Neutral","Lawful Evil","Neutral Evil","Chaotic Evil"];
+    const races = RACES.slice(1); const classes = CLASSES.slice(1); const backgrounds = BACKGROUNDS.slice(1); const alignments = ALIGNMENTS.slice(1);
+    const ideals = ["Charity","Change","Tradition","Freedom","Power","Faith","Knowledge","Redemption","Glory","Community","Balance","Aspiration"];
+    const bonds = ["a family heirloom","a fallen mentor","a childhood friend lost to time","a village in need","a ship and crew","an oath sworn under starlight","an ancient map","a mysterious letter","a debt unpaid","a beloved tavern","a rescued stray animal","a secret society pin"];
+    const flaws = ["can’t resist a shiny coin","trusts a little too easily","holds grudges like trophies","never turns down a dare","is haunted by prophetic dreams","talks to unseen companions","is reckless in defense of friends","is tempted by forbidden knowledge","hates to admit a mistake","gets lost in daydreams"];
+    const homelands = ["a fog‑draped coastal town","a cliff‑side fortress","a bustling trade road","a mossy forest hamlet","a desert caravan outpost","a glacier‑shadowed valley","a market city of marbled halls","a salt‑sprayed fishing village","a windswept steppe camp","a labyrinthine library‑city"];
+    const quirks = ["collects odd keys with no locks","keeps a journal written backward","braids charms into their hair","speaks in proverbs at dawn","wears mismatched gloves for luck","swears by the phases of the moon","hums sea shanties when nervous","sketches monsters they’ve never met","carries tea for emergency peace talks","names every weapon they own"];
+
+    const CASTER_SPELL_COUNT = {
+      Bard: lvl => ({ cantrips: Math.min(4, 2 + Math.floor(lvl/5)), spells: Math.min(6, 4 + Math.floor(lvl/2)) }),
+      Cleric: lvl => ({ cantrips: Math.min(5, 3 + Math.floor(lvl/5)), spells: Math.min(8, 3 + lvl) }),
+      Druid: lvl => ({ cantrips: Math.min(4, 2 + Math.floor(lvl/5)), spells: Math.min(8, 3 + lvl) }),
+      Paladin: lvl => ({ cantrips: 0, spells: Math.max(0, Math.floor((lvl+1)/2)) }),
+      Ranger: lvl => ({ cantrips: 0, spells: Math.max(0, Math.floor((lvl+1)/2)) }),
+      Sorcerer: lvl => ({ cantrips: Math.min(6, 4 + Math.floor(lvl/5)), spells: Math.min(6, 2 + Math.floor(lvl/2)) }),
+      Warlock: lvl => ({ cantrips: Math.min(4, 2 + Math.floor(lvl/5)), spells: Math.min(4, 1 + Math.floor(lvl/3)) }),
+      Wizard: lvl => ({ cantrips: Math.min(5, 3 + Math.floor(lvl/5)), spells: Math.min(8, 3 + lvl) }),
+    };
+    const SPELLS = {
+      Bard: ["Vicious Mockery","Healing Word","Dissonant Whispers","Faerie Fire","Charm Person","Tasha’s Hideous Laughter","Thunderwave","Speak with Animals","Detect Magic","Silence","Shatter"],
+      Cleric: ["Guidance","Sacred Flame","Bless","Cure Wounds","Shield of Faith","Sanctuary","Inflict Wounds","Spiritual Weapon","Lesser Restoration","Prayer of Healing"],
+      Druid: ["Produce Flame","Guidance","Entangle","Goodberry","Healing Word","Faerie Fire","Thunderwave","Spike Growth","Flaming Sphere","Pass without Trace"],
+      Paladin: ["Divine Favor","Shield of Faith","Bless","Cure Wounds","Compelled Duel","Searing Smite","Wrathful Smite","Aid","Lesser Restoration"],
+      Ranger: ["Hunter’s Mark","Goodberry","Fog Cloud","Cure Wounds","Ensnaring Strike","Hail of Thorns","Pass without Trace","Spike Growth"],
+      Sorcerer: ["Fire Bolt","Mage Hand","Shield","Magic Missile","Burning Hands","Chromatic Orb","Scorching Ray","Mirror Image","Invisibility"],
+      Warlock: ["Eldritch Blast","Mage Hand","Hex","Armor of Agathys","Hellish Rebuke","Comprehend Languages","Invisibility","Mirror Image"],
+      Wizard: ["Mage Hand","Prestidigitation","Shield","Magic Missile","Sleep","Detect Magic","Grease","Mirror Image","Scorching Ray","Invisibility"]
+    };
+    const CLASS_GEAR = {
+      Barbarian: ["Greataxe", "Handaxe x2", "Explorer’s Pack", "Javelin x4"],
+      Bard: ["Rapier", "Diplomat’s Pack", "Lute", "Leather Armor", "Dagger"],
+      Cleric: ["Mace", "Chain Mail", "Shield", "Holy Symbol", "Priest’s Pack"],
+      Druid: ["Scimitar", "Leather Armor", "Druidic Focus", "Explorer’s Pack","Shield (wooden)"],
+      Fighter: ["Chain Mail", "Longsword", "Shield", "Light Crossbow + Bolts x20", "Explorer’s Pack"],
+      Monk: ["Shortsword", "Dungeoneer’s Pack", "Dart x10"],
+      Paladin: ["Chain Mail", "Longsword", "Shield", "Holy Symbol", "Priest’s Pack", "Javelin x5"],
+      Ranger: ["Scale Mail", "Shortsword x2", "Longbow + Arrows x20", "Explorer’s Pack"],
+      Rogue: ["Rapier", "Shortbow + Arrows x20", "Burglar’s Pack", "Leather Armor", "Dagger x2", "Thieves’ Tools"],
+      Sorcerer: ["Dagger", "Arcane Focus", "Explorer’s Pack"],
+      Warlock: ["Light Crossbow + Bolts x20", "Component Pouch", "Scholar’s Pack", "Leather Armor","Dagger x2"],
+      Wizard: ["Quarterstaff", "Spellbook", "Scholar’s Pack", "Component Pouch"]
+    };
+    const BG_GEAR = {
+      Acolyte: ["Holy Symbol","Prayer Book","Stick of Incense x5","Common Clothes","Belt Pouch (15 gp)"],
+      Charlatan: ["Disguise Kit","Weighted Dice","Fine Clothes","Belt Pouch (15 gp)"],
+      Criminal: ["Crowbar","Dark Common Clothes with Hood","Belt Pouch (15 gp)"],
+      Entertainer: ["Disguise Kit","Musical Instrument","Costume","Belt Pouch (15 gp)"],
+      "Folk Hero": ["Artisan’s Tools","Shovel","Iron Pot","Common Clothes","Belt Pouch (10 gp)"],
+      "Guild Artisan": ["Artisan’s Tools","Letter of Introduction","Traveler’s Clothes","Belt Pouch (15 gp)"],
+      Hermit: ["Scroll Case", "Winter Blanket","Herbalism Kit","Common Clothes","Belt Pouch (5 gp)"],
+      Noble: ["Fine Clothes","Signet Ring","Scroll of Pedigree","Purse (25 gp)"],
+      Outlander: ["Staff","Hunting Trap","Traveler’s Clothes","Belt Pouch (10 gp)"],
+      Sage: ["Bottle of Ink","Quill","Small Knife","Letter","Common Clothes","Belt Pouch (10 gp)"],
+      Sailor: ["Belaying Pin (club)","50ft Silk Rope","Lucky Charm","Common Clothes","Belt Pouch (10 gp)"],
+      Soldier: ["Insignia","Trophy from a Foe","Bone Dice","Common Clothes","Belt Pouch (10 gp)"],
+      Urchin: ["Small Knife","Map of City","Pet Mouse","Token of Parent","Common Clothes","Belt Pouch (10 gp)"]
+    };
+    const MAGIC_ITEMS_COMMON = ["Potion of Healing","Potion of Climbing","Potion of Water Breathing","Cloak of Many Fashions","Moon-Touched Sword","Hat of Vermin","Driftglobe","Potion of Growth"];
+    const MAGIC_ITEMS_UNCOMMON = ["+1 Weapon (simple/martial)","+1 Shield","Bag of Holding","Wand of Magic Detection","Boots of Elvenkind","Cloak of Protection","Goggles of Night","Ring of Water Walking"];
+    const MAGIC_ITEMS_RARE = ["+2 Weapon","+1 Armor (chain/studded/leather)","Amulet of Health","Ring of Evasion","Staff of the Python","Wand of Web","Brooch of Shielding"];
+    const MAGIC_ITEMS_CURSED = ["Cursed Locket (disadvantage on Insight)","Bitter Blade (attuned, whispers for blood)","Hungry Pouch (consumes 1d6 rations nightly)"];
+
+    function rand(list){ return list[Math.floor(Math.random()*list.length)]; }
+    function cap(w){ return w.charAt(0).toUpperCase()+w.slice(1); }
+    function roll3d6(){ return Array.from({length:3},()=>1+Math.floor(Math.random()*6)).reduce((a,b)=>a+b,0); }
+    function roll4d6DropLowest(){ const rolls = Array.from({length:4}, () => 1+Math.floor(Math.random()*6)).sort((a,b)=>a-b); return rolls.slice(1).reduce((a,b)=>a+b,0); }
+    function roll4d6DL_Reroll1s(){ const r=()=>{ let v=1+Math.floor(Math.random()*6); return v===1?2:v; }; const rolls=[r(),r(),r(),r()].sort((a,b)=>a-b); return rolls.slice(1).reduce((a,b)=>a+b,0)+1; }
+    function genStats(mode){ const order=["STR","DEX","CON","INT","WIS","CHA"]; const roller=mode==="epic"?roll4d6DL_Reroll1s:mode==="hardcore"?roll3d6:roll4d6DropLowest; const scores=order.map(()=>roller()); return Object.fromEntries(order.map((k,i)=>[k,scores[i]])); }
+    const nameBits = { Human:["al","ben","cara","dan","el","fin","gar","hana","isa","jor","ka","lea","mar","nen","os","pia","quin","ro","sa","tor","uva","val","wren","xan","yor","zel"], Elf:["ael","thal","syl","luth","elar","fae","ith","rael","vel","wyn","shael","eir"], Dwarf:["bor","dun","gran","thra","kor","brom","heim","gar","uldu","skar"], Halfling:["pip","milo","rosa","tala","bree","merri","penn","tuck","liddle"], Gnome:["tink","whis","bodd","nib","fizz","pock","wizzle","nack"], "Half‑Elf":["aer","elan","sian","thal","kor","ren","lyr","vae"], "Half‑Orc":["grum","ug","mok","rug","sha","tor","gash","krug"], Tiefling:["aza","zeph","nyx","ira","val","xil","rax","ish"], Dragonborn:["arj","balar","dra","oz","vyr","sora","myr","kraz"], Aasimar:["sera","lum","aur","kana","eli","ori","thea","sol"], Genasi:["igni","zeph","mar","ter","syl","vul","aer","brin"], Goliath:["strog","kel","vaan","ruk","torv","gran","bald","khun"], Tabaxi:["whis","purr","sil","claw","shade","swift","pounce","mew"], Firbolg:["caed","moss","thorn","bryl","rowan","bog","loam","thim"], Triton:["thal","mare","brine","nere","coral","seph","maris","del"] };
+    function genName(race){ const bits=nameBits[race]||nameBits.Human; const part=()=>cap(rand(bits)); const maybeHyphen=Math.random()<0.25; const first=part()+(Math.random()<0.5?part():""); const last=Math.random()<0.6?part()+(Math.random()<0.5?part():""):""; return last?`${first}${maybeHyphen?"-":" "}${last}`:first; }
+    function genBackstory({ name, race, cls, background, alignment, quirkOn }){ const homeland=rand(homelands); const quirk=rand(quirks); const bond=rand(bonds); const ideal=rand(ideals); const flaw=rand(flaws); const q=quirkOn?`, and a habit: ${quirk}`:""; return `${name} hails from ${homeland}. Once a ${background.toLowerCase()}, ${name.toLowerCase()} learned that ${ideal.toLowerCase()} can be a compass through chaos. Now a ${race.toLowerCase()} ${cls.toLowerCase()}, they carry ${bond}${q}. Their ${alignment.toLowerCase()} streak cuts both ways — brave in a pinch, but ${flaw}.`; }
+    function genInventory(cls, background, level){ const base=["Bedroll","Rations (3 days)","Waterskin"]; const classGear=CLASS_GEAR[cls]||[]; const bgGear=BG_GEAR[background]||[]; const levelUp=level>=5?["Climbing Kit"]:[]; return [...base,...classGear,...bgGear,...levelUp]; }
+    function classBias(cls){ if(["Wizard","Sorcerer","Warlock","Bard","Cleric","Druid"].includes(cls)) return "caster"; if(["Rogue","Ranger","Monk"].includes(cls)) return "dex"; return "str"; }
+    function genMagicItems(mode, cls){ const bias=classBias(cls); const pick=(arr)=>arr[Math.floor(Math.random()*arr.length)]; let items=[]; const roll=Math.random(); if(mode==="epic"){ items.push(pick(MAGIC_ITEMS_UNCOMMON), pick(MAGIC_ITEMS_UNCOMMON)); if(Math.random()<0.6) items.push(pick(MAGIC_ITEMS_RARE)); } else if(mode==="hardcore"){ if(roll<0.10) items.push(pick(MAGIC_ITEMS_CURSED)); else if(roll<0.18) items.push(pick(MAGIC_ITEMS_COMMON)); } else if(mode==="npc"){ if(roll<0.05) items.push(pick(MAGIC_ITEMS_COMMON)); } else { if(roll<0.20) items.push(Math.random()<0.7?pick(MAGIC_ITEMS_COMMON):pick(MAGIC_ITEMS_UNCOMMON)); } return items.map(it=> it.startswith?it:it.replace("+1 Weapon","Wand of the War Mage +1") ); }
+
+    async function fetchPortrait({ race, cls, background, alignment }){
+      const style = "8-bit pixel art medieval fantasy, bust portrait, dramatic lighting, crisp pixels, clean silhouette";
+      const prompt = `Pixel art portrait, ${race} ${cls}, background: ${background}, alignment: ${alignment}. ${style}.`;
+      const ctrl = new AbortController(); const id=setTimeout(()=>ctrl.abort(),30000);
+      try{
+        const resp = await fetch("/.netlify/functions/portrait", { method:"POST", headers:{ "Content-Type":"application/json","Accept":"application/json" }, body: JSON.stringify({ prompt }), signal: ctrl.signal });
+        const text = await resp.text(); clearTimeout(id);
+        let data; try{ data = JSON.parse(text); } catch { return { url:null, error:"Invalid JSON from server", preview:text.slice(0,200) }; }
+        if(!resp.ok){ return { url:null, error:data?.error||"Portrait API error", details:data?.details||data?.raw }; }
+        return { url:data.url, error:null };
+      } catch(e){ return { url:null, error:"Network or timeout error", details:String(e) }; }
+    }
+
+    const PixelFrame = ({ children }) => (<div className="relative"><div className="absolute inset-0 translate-x-1 translate-y-1 bg-black/40" /><div className="relative border-4 border-black outline outline-2 outline-white"><div className="border-4 border-[#2b2b2b]"><div className="border-4 border-[#6e5532] bg-[#f6f0e6]">{children}</div></div></div></div>);
+    const Stat = ({ label, value }) => (<div className="flex items-center justify-between px-3 py-1 border-b border-black/20"><span className="font-bold tracking-wide">{label}</span><span className="px-2 py-0.5 border-2 border-black bg-white font-black">{value}</span></div>);
+    function Select({label,value,onChange,options}){ return (<label className="text-xs font-mono uppercase tracking-wider grid gap-1"><span>{label}</span><select value={value} onChange={e=>onChange(e.target.value)} className="border-4 border-black bg-white px-2 py-1 font-sans text-sm">{options.map(o => <option key={o} value={o}>{o}</option>)}</select></label>); }
+    function Toggle({label,checked,onChange}){ return (<label className="flex items-center gap-2 text-sm"><input type="checkbox" className="toggle" checked={checked} onChange={e=>onChange(e.target.checked)} /><span className={"px-2 py-1 box " + (checked ? "outline outline-4 outline-black" : "")}>{label}</span></label>); }
+    function ModeButton({ label, active, onClick }){ return (<button onClick={onClick} className={"btn " + (active ? "mode-active" : "")}><span className="shadow"></span><span className={"face " + (active? "bg-[#a8e6a1]" : "bg-[#d0d0d0]")}>{label}</span></button>); }
+
+    function App(){
+      const [character, setCharacter] = useState(null);
+      const [loadingPortrait, setLoadingPortrait] = useState(false);
+      const [portraitError, setPortraitError] = useState(null);
+      const [portraitPreview, setPortraitPreview] = useState(null);
+
+      const [includeBackstory, setIncludeBackstory] = useState(true);
+      const [includeInventory, setIncludeInventory] = useState(true);
+      const [includeQuirk, setIncludeQuirk] = useState(true);
+      const [includeSpells, setIncludeSpells] = useState(true);
+      const [includeMagicItems, setIncludeMagicItems] = useState(true);
+
+      const [level, setLevel] = useState("1");
+      const [raceSel, setRaceSel] = useState("Random");
+      const [classSel, setClassSel] = useState("Random");
+      const [bgSel, setBgSel] = useState("Random");
+      const [alignSel, setAlignSel] = useState("Random");
+
+      const [mode, setMode] = useState("normal");
+
+      const title = useMemo(() => (<span className="inline-block align-middle"><span className="mr-2">🛡️</span>8‑Bit Adventurer Forge<span className="ml-2">⚔️</span></span>), []);
+
+      async function generate(){
+        setPortraitError(null); setPortraitPreview(null);
+        const lvl = Math.max(1, Math.min(20, parseInt(level)||1));
+        const race = raceSel==="Random" ? rand(races) : raceSel;
+        const cls = classSel==="Random" ? rand(classes) : classSel;
+        const background = bgSel==="Random" ? rand(backgrounds) : bgSel;
+        const alignment = alignSel==="Random" ? rand(alignments) : alignSel;
+        const name = genName(race);
+
+        const stats = mode==="npc" ? null : genStats(mode);
+        const backstory = includeBackstory ? genBackstory({ name, race, cls, background, alignment, quirkOn: includeQuirk }) : null;
+        const inventory = includeInventory ? genInventory(cls, background, lvl) : null;
+
+        let spells = null;
+        if (includeSpells && (cls in CASTER_SPELL_COUNT)) {
+          const counts = CASTER_SPELL_COUNT[cls](lvl);
+          const pool = SPELLS[cls] || [];
+          const sample = (n) => { const copy=pool.slice(); const out=[]; while(n-- > 0 && copy.length){ out.push(copy.splice(Math.floor(Math.random()*copy.length),1)[0]); } return out; };
+          spells = { cantrips: counts.cantrips ? sample(counts.cantrips) : [], spells: counts.spells ? sample(Math.min(counts.spells, pool.length)) : [] };
+        }
+
+        const magicItems = includeMagicItems ? (function(){ const bias = ["Wizard","Sorcerer","Warlock","Bard","Cleric","Druid"].includes(cls) ? "caster" : (["Rogue","Ranger","Monk"].includes(cls) ? "dex" : "str"); const pick=(arr)=>arr[Math.floor(Math.random()*arr.length)]; let items=[]; const roll=Math.random(); if(mode==="epic"){ items.push(pick(MAGIC_ITEMS_UNCOMMON), pick(MAGIC_ITEMS_UNCOMMON)); if(Math.random()<0.6) items.push(pick(MAGIC_ITEMS_RARE)); } else if(mode==="hardcore"){ if(roll<0.10) items.push(pick(MAGIC_ITEMS_CURSED)); else if(roll<0.18) items.push(pick(MAGIC_ITEMS_COMMON)); } else if(mode==="npc"){ if(roll<0.05) items.push(pick(MAGIC_ITEMS_COMMON)); } else { if(roll<0.20) items.push(Math.random()<0.7?pick(MAGIC_ITEMS_COMMON):pick(MAGIC_ITEMS_UNCOMMON)); } return items.map(it => it.startsWith("+1 Weapon") ? (bias==="dex" ? "+1 Shortsword (or Shortbow)" : bias==="caster" ? "Wand of the War Mage +1" : "+1 Longsword (or Greataxe)") : it); })() : [];
+
+        const payload = { name, race, cls, background, alignment, level:lvl, stats, backstory, inventory, spells, magicItems, mode, imageUrl: null };
+        setCharacter(payload);
+
+        setLoadingPortrait(true);
+        const { url, error, details, preview } = await fetchPortrait(payload);
+        setCharacter(prev => prev ? ({...prev, imageUrl: url}) : prev);
+        if (error) { setPortraitError(`${error}${details ? ` — ${typeof details === 'string' ? details : JSON.stringify(details)}` : ''}`); if (preview) setPortraitPreview(preview); }
+        setLoadingPortrait(false);
+      }
+
+      function clearAll(){ setCharacter(null); setPortraitError(null); setPortraitPreview(null); }
+
+      return (
+        <div className="min-h-screen w-full">
+          <div className="max-w-5xl mx-auto px-4 py-8">
+            <header className="mb-6">
+              <PixelFrame><div className="px-5 py-3 bg-[#e6dcc9] font-mono uppercase tracking-widest text-xl md:text-2xl text-center">{title}</div></PixelFrame>
+            </header>
+
+            <div className="grid gap-6 md:grid-cols-[1fr_auto] items-start">
+              <section>
+                <PixelFrame>
+                  <div className="p-4 md:p-6">
+                    <div className="flex items-center justify-between mb-3">
+                      <h2 className="font-mono uppercase tracking-widest text-lg md:text-xl">Character</h2>
+                      <span className="text-xs md:text-sm">v5c • Node18 baked-in</span>
+                    </div>
+
+                    {character ? (
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-4">
+                          <div className="border-4 border-black bg-[#efe7d6] p-1 portrait-frame flex items-center justify-center">
+                            {loadingPortrait && <span className="text-xs font-mono">Generating…</span>}
+                            {!loadingPortrait && character.imageUrl && <img src={character.imageUrl} alt="portrait" className="w-full h-full object-cover" />}
+                            {!loadingPortrait && !character.imageUrl && <span className="text-xs font-mono">No portrait</span>}
+                          </div>
+                          <div className="flex-1">
+                            <div className="box">
+                              <div className="text-2xl md:text-3xl font-black leading-none mb-1">{character.name}</div>
+                              <div className="font-mono uppercase tracking-wider text-sm wrap">L{character.level} • {character.race} • {character.cls} • {character.background} • {character.alignment}{character.mode!=="normal" ? ` • ${character.mode.toUpperCase()}` : ""}</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {portraitError && <div className="error">Portrait error: {portraitError}{portraitPreview ? ` | Preview: ${portraitPreview}` : ""}</div>}
+
+                        {character.stats && (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border-2 border-black bg-[#f2eadb]">
+                            {Object.entries(character.stats).map(([k,v]) => (<Stat key={k} label={k} value={v} />))}
+                          </div>
+                        )}
+
+                        {character.backstory && (
+                          <div className="box"><h3 className="font-mono uppercase tracking-widest text-sm mb-2">Backstory</h3><p className="text-sm md:text-base wrap">{character.backstory}</p></div>
+                        )}
+
+                        {character.inventory && (
+                          <div className="box"><h3 className="font-mono uppercase tracking-widest text-sm mb-2">Inventory</h3><ul className="text-sm">{character.inventory.map((it,i)=>(<li key={i}>• {it}</li>))}</ul></div>
+                        )}
+
+                        {character.spells && (character.spells.cantrips?.length || character.spells.spells?.length) && (
+                          <div className="box">
+                            <h3 className="font-mono uppercase tracking-widest text-sm mb-2">Spells</h3>
+                            {character.spells.cantrips?.length>0 && (<p className="text-sm mb-1 wrap"><span className="font-bold">Cantrips:</span> {character.spells.cantrips.join(", ")}</p>)}
+                            {character.spells.spells?.length>0 && (<p className="text-sm wrap"><span className="font-bold">Spells:</span> {character.spells.spells.join(", ")}</p>)}
+                          </div>
+                        )}
+
+                        {character.magicItems?.length>0 && (
+                          <div className="box"><h3 className="font-mono uppercase tracking-widest text-sm mb-2">Magic Items</h3><ul className="text-sm">{character.magicItems.map((it,i)=>(<li key={i}>• {it}</li>))}</ul></div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-center py-10">
+                        <p className="font-mono uppercase tracking-wider">Click ROLL for a hero + portrait.</p>
+                        <p className="text-sm opacity-70">Use Options to customise the output.</p>
+                      </div>
+                    )}
+                  </div>
+                </PixelFrame>
+              </section>
+
+              <aside className="md:sticky md:top-6">
+                <PixelFrame>
+                  <div className="p-4 flex flex-col gap-3 items-stretch">
+                    <button onClick={generate} className="btn"><span className="shadow"></span><span className="face bg-[#f0c040]">🎲 Roll New Adventurer</span></button>
+                    <button onClick={clearAll} className="btn"><span className="shadow"></span><span className="face bg-[#d0d0d0]">🧹 Clear</span></button>
+
+                    <details className="mt-2">
+                      <summary className="cursor-pointer select-none flex items-center gap-2 font-mono uppercase tracking-widest text-xs"><span className="twist inline-block transition-transform">▶</span>Options</summary>
+                      <div className="mt-3 grid gap-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <Select label="Level" value={level} onChange={setLevel} options={Array.from({length:20},(_,i)=>String(i+1))} />
+                          <Select label="Race" value={raceSel} onChange={setRaceSel} options={RACES} />
+                          <Select label="Class" value={classSel} onChange={setClassSel} options={CLASSES} />
+                          <Select label="Background" value={bgSel} onChange={setBgSel} options={BACKGROUNDS} />
+                          <Select label="Alignment" value={alignSel} onChange={setAlignSel} options={ALIGNMENTS} />
+                        </div>
+                        <div className="grid gap-2">
+                          <Toggle label="Backstory" checked={includeBackstory} onChange={setIncludeBackstory} />
+                          <Toggle label="Inventory" checked={includeInventory} onChange={setIncludeInventory} />
+                          <Toggle label="Quirk in Backstory" checked={includeQuirk} onChange={setIncludeQuirk} />
+                          <Toggle label="Spells (if caster)" checked={includeSpells} onChange={setIncludeSpells} />
+                          <Toggle label="Magic Items" checked={includeMagicItems} onChange={setIncludeMagicItems} />
+                        </div>
+                        <div className="grid gap-2">
+                          <div className="font-mono uppercase tracking-widest text-xs">Mode</div>
+                          <div className="grid grid-cols-4 gap-2">
+                            <ModeButton label="Normal" active={mode==="normal"} onClick={()=>setMode("normal")} />
+                            <ModeButton label="NPC" active={mode==="npc"} onClick={()=>setMode("npc")} />
+                            <ModeButton label="Epic" active={mode==="epic"} onClick={()=>setMode("epic")} />
+                            <ModeButton label="Hardcore" active={mode==="hardcore"} onClick={()=>setMode("hardcore")} />
+                          </div>
+                        </div>
+                      </div>
+                    </details>
+
+                    <p className="text-xs opacity-80 mt-2">Portraits need `OPENAI_API_KEY`. Node 18 is auto-set via netlify.toml in this build.</p>
+                  </div>
+                </PixelFrame>
+              </aside>
+            </div>
+
+            <footer className="mt-8 text-center text-[#e8dfce]/80 text-xs"><p>Made with ♥ for tabletop adventurers.</p></footer>
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root')); root.render(<App />);
+  </script>
+</body>
+</html>
