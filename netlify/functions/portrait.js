@@ -24,7 +24,7 @@ export async function handler(event, context) {
     const resp = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",
       headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify({ model: "gpt-image-1", prompt, size: "256x256", n: 1 })
+      body: JSON.stringify({ model: "gpt-image-1", prompt, size: "1024x1024", n: 1 })
     });
     const text = await resp.text();
     let json;
